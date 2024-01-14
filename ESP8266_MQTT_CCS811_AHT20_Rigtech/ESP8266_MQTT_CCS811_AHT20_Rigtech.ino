@@ -43,7 +43,9 @@ AHT20 aht20;
 #define OLED_RESET -1       // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-unsigned long previousMillis = 0;
+// unsigned long previousMillis = 0;
+
+uint32_t timer_MQQT, timer_DATA;
 
 void setup() {
   Serial.begin(115200);
@@ -63,38 +65,32 @@ void setup() {
 void loop() {
   client.loop();
 
-  unsigned long currentMillis = millis();
+  uint16_t eco2, etvoc, errstat, raw;
+  float humidity, temperature;
   
-  if (currentMillis - previousMillis >= 10000) {
+  if (millis() - timer_DATA >= 1000) {
 
-    previousMillis = currentMillis;
+    timer_DATA = millis();
 
-    float humidity = aht20.getHumidity();
-    float temperature = aht20.getTemperature();
+    humidity = aht20.getHumidity();
+    temperature = aht20.getTemperature();
 
     ccs811.set_envdata_Celsius_percRH(temperature, humidity);
 
     // Read
-    uint16_t eco2, etvoc, errstat, raw;
     ccs811.read(&eco2, &etvoc, &errstat, &raw); 
 
     if (errstat == CCS811_ERRSTAT_OK ) { 
-      Serial.print("CCS811: ");
-      Serial.print("eco2=");  Serial.print(eco2); Serial.print(" ppm  ");
-      Serial.print("etvoc="); Serial.print(etvoc); Serial.print(" ppb  ");
-      Serial.print("temp="); Serial.print(temperature); Serial.print(" C  ");
-      Serial.print("hum="); Serial.print(humidity); Serial.print(" %  ");
+      Serial.print("eCO2 =");  Serial.print(eco2); Serial.print(" ppm  ");
+      Serial.print("eTVOC ="); Serial.print(etvoc); Serial.print(" ppb  ");
+      Serial.print("Temperature ="); Serial.print(temperature); Serial.print(" C  ");
+      Serial.print("Humidity ="); Serial.print(humidity); Serial.print(" %  ");
       Serial.println();
 
       // client.publish("airsense/eco2", String(eco2));
       // client.publish("airsense/tvoc", String(etvoc));
       // client.publish("airsense/temp", String(temperature));
       // client.publish("airsense/hum", String(humidity));
-
-      client.publish("house/eco2", String(eco2));
-      client.publish("house/tvoc", String(etvoc));
-      client.publish("house/temp", String(temperature));
-      client.publish("house/hum", String(humidity));
 
       display.clearDisplay();
 
@@ -142,6 +138,15 @@ void loop() {
       showErrorOnDisplay();
     }
   }
+
+  if (millis() - timer_MQQT >= 10000) {
+    timer_MQQT = millis();
+    
+    client.publish("house/eco2", String(eco2));
+    client.publish("house/tvoc", String(etvoc));
+    client.publish("house/temp", String(temperature));
+    client.publish("house/hum", String(humidity));
+  }
 }
 
 void showErrorOnDisplay() {
@@ -175,8 +180,6 @@ void setupCCS811() {
   bool ok = ccs811.begin();
   if(!ok) Serial.println("setup: CCS811 begin FAILED");
 
-
-  
   // Start measuring
   ok = ccs811.start(CCS811_MODE_1SEC);
   if(!ok) Serial.println("setup: CCS811 start FAILED");
